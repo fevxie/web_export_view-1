@@ -19,53 +19,81 @@
 //
 //#############################################################################
 
-openerp.web_export_view = function(openerp) {
+openerp.web_export_view = function(instance, m) {
 
-    _t = openerp.web._t;
+    var _t = instance.web._t,
+    QWeb = instance.web.qweb;
 
-    openerp.web.Sidebar = openerp.web.Sidebar.extend({
-
-        add_default_sections: function() {
-            // IMHO sections should be registered objects
-            // as views and retrieved using a specific registry
-            // so that we don't have to override this
-            
-            var self = this,
-            view = this.widget_parent,
-            view_manager = view.widget_parent,
-            action = view_manager.action;
-            if (this.session.uid === 1) {
-                this.add_section(_t('Customize'), 'customize');
-                this.add_items('customize', [{
-                    label: _t("Translate"),
-                    callback: view.on_sidebar_translate,
-                    title: _t("Technical translation")
-                }]);
-            }
-
-            this.add_section(_t('Other Options'), 'other');
-            this.add_items('other', [
-                {
-                    label: _t("Import"),
-                    callback: view.on_sidebar_import
-                }, {
-                    label: _t("Export"),
-                    callback: view.on_sidebar_export
-                },
-                {
-                    label: _t("Export current view"),
-                    callback: this.on_sidebar_export_view
-                }
-            ]);
+    instance.web.Sidebar.include({
+        redraw: function() {
+            var self = this;
+            this._super.apply(this, arguments);
+            self.$el.find('.oe_sidebar').append(QWeb.render('AddExportViewMain', {widget: self}));
+            self.$el.find('.oe_sidebar_export_view_xls').on('click', self.on_sidebar_export_view_xls);
+            self.$el.find('.oe_sidebar_export_all_xls').on('click', self.on_sidebar_export_all_xls);
         },
 
-        on_sidebar_export_view: function() {
+        on_sidebar_export_all_xls: function() {
+            //$.blockUI();
+            var self = this;
+            var domain_deferred = this.get_current_domain();
+            var domain;
+
+            $.when(domain_deferred).done(function (results) {
+                domain = results.domain;
+                var export_columns_names = [];
+                var export_columns_keys = [];
+                var view = self.getParent();
+
+                console.log('got domain, getting columns');
+
+                // get column names
+                $.each(view.visible_columns, function(){
+                    if(this.tag=='field'){
+                        export_columns_names.push(this.string);
+                        export_columns_keys.push(this.id);
+                    }
+                });
+
+                console.log('got columns, getting file. : ' + export_columns_keys);
+
+                // get xls file
+                view.session.get_file({
+                    url: '/web/export/xls_view',
+                    data: { data: JSON.stringify({
+                        model : view.model,
+                        headers : export_columns_keys,
+                        domain : domain,
+                    })},
+                    complete: function(){
+                        console.log('got file');
+                        $.unblockUI;
+                    }
+                });
+            });
+        },
+
+        get_current_domain: function () {
+            var search_view = this.getParent().ViewManager.searchview;
+            var search_data = search_view.build_search_data();
+            var active_domain_done = instance.web.pyeval.eval_domains_and_contexts({
+                domains: search_data.domains,
+                contexts: search_data.contexts,
+                group_by_seq: search_data.groupbys || []
+            }).done(function (results) {
+                return results.domain;
+            });
+            return active_domain_done;
+        },
+
+        on_sidebar_export_view_xls: function() {
             // Select the first list of the current (form) view
             // or assume the main view is a list view and use that
             var self = this,
-            view = this.widget_parent; // valid for list view
-            if (view.widget_children) {
-                view.widget_children.every(function(child) {
+            view = this.getParent(),
+            children = view.getChildren();
+            if (children) {
+                children.every(function(child) {
                     if (child.field && child.field.type == 'one2many') {
                         view = child.viewmanager.views.list.controller;
                         return false; // break out of the loop
@@ -77,45 +105,48 @@ openerp.web_export_view = function(openerp) {
                     return true;
                 });
             }
-            var columns = view.visible_columns;
             export_columns_keys = [];
             export_columns_names = [];
-            $.each(columns,function(){
+            $.each(view.visible_columns, function(){
                 if(this.tag=='field'){
                     // non-fields like `_group` or buttons
                     export_columns_keys.push(this.id);
                     export_columns_names.push(this.string);
                 }
             });
-            rows = view.$element.find('.ui-widget-content tr');
+            rows = view.$el.find('.oe_list_content > tbody > tr');
             export_rows = [];
-            $.each(rows,function(){         
+            $.each(rows,function(){
                 $row = $(this);
-                // find only rows with data     
+                // find only rows with data
                 if($row.attr('data-id')){
                     export_row = [];
-                    $.each(export_columns_keys,function(){
-                        cell = $row.find('td[data-field="'+this+'"]').get(0);
-                        var data_id = $( '<div>' + cell.innerHTML + '</div>');
-                        if(data_id.find('input').get(0) != undefined) {
-                                if(data_id.find('input').get(0).type == 'checkbox'){
-                                        if(data_id.find('input').get(0).checked){
-                                                text = _t("True");
-                                        }
-                                        else {
-                                                text = _t("False");
-                                        }
+                    checked = $row.find('th input[type=checkbox]').attr("checked");
+                    if (children && checked === "checked"){
+                        $.each(export_columns_keys,function(){
+                            cell = $row.find('td[data-field="'+this+'"]').get(0);
+                            text = cell.text || cell.textContent || cell.innerHTML || "";
+                            if (cell.classList.contains("oe_list_field_float")){
+                                export_row.push(instance.web.parse_value(text, {'type': "float"}));
+                            }
+                            else if (cell.classList.contains("oe_list_field_boolean")){
+                        	var data_id = $( '<div>' + cell.innerHTML + '</div>');
+                                if(data_id.find('input').get(0).checked){
+                                	export_row.push(_t("True"));
                                 }
                                 else {
-                                         text = cell.text || cell.textContent || cell.innerHTML || "";
+                                	export_row.push(_t("False"));
                                 }
-                        }
-                        else{  
-                                text = cell.text || cell.textContent || cell.innerHTML || "";
-                        }      
-                        export_row.push(text.trim());   
-                    });
-                    export_rows.push(export_row);   
+                            }
+                            else if (cell.classList.contains("oe_list_field_integer")){
+                               export_row.push(parseInt(text));
+                            }
+                            else{
+                               export_row.push(text.trim());
+                            }
+                        });
+                        export_rows.push(export_row);
+                    };
                 }
             });
             $.blockUI();
@@ -132,4 +163,4 @@ openerp.web_export_view = function(openerp) {
 
     });
 
-}
+};
