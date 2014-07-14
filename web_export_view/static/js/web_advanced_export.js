@@ -34,7 +34,7 @@ openerp.web_export_view = function(instance, m) {
         },
 
         on_sidebar_export_all_xls: function() {
-            //$.blockUI();
+            $.blockUI();
             var self = this;
             var domain_deferred = this.get_current_domain();
             var domain;
@@ -45,8 +45,6 @@ openerp.web_export_view = function(instance, m) {
                 var export_columns_keys = [];
                 var view = self.getParent();
 
-                console.log('got domain, getting columns');
-
                 // get column names
                 $.each(view.visible_columns, function(){
                     if(this.tag=='field'){
@@ -55,20 +53,16 @@ openerp.web_export_view = function(instance, m) {
                     }
                 });
 
-                console.log('got columns, getting file. : ' + export_columns_keys);
-
                 // get xls file
                 view.session.get_file({
                     url: '/web/export/xls_view',
                     data: { data: JSON.stringify({
                         model : view.model,
                         headers : export_columns_keys,
+                        headers_string: export_columns_names,
                         domain : domain,
                     })},
-                    complete: function(){
-                        console.log('got file');
-                        $.unblockUI;
-                    }
+                    complete: $.unblockUI
                 });
             });
         },

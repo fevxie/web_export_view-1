@@ -39,18 +39,23 @@ class ExcelExportView(ExcelExport):
     def index(self, req, data, token):
         data = json.loads(data)
         model = data.get('model', [])
-        columns_headers = data.get('headers', [])
-        rows = data.get('rows', [])
-        domain = data.get('domain', None)
+        domain = data.get('domain') or []
+        rows = data.get('rows', None)
+        column_headers = data.get('headers', [])
+        column_headers_string = data.get('headers_string', [])
+        column_headers_translated = dict(zip(column_headers, column_headers_string and column_headers_string or column_headers))
         
-        # load all rows from the database
-        if domain != None and not rows:
+        # rows not supplied, meaning the user wanted to get all in domain
+        if rows == None:
+            # get ids in domain, data for ids
             ids = req.session.model(model).search(domain)
-            data = req.session.model(model).read(ids, columns_headers)
+            record_data = req.session.model(model).read(ids, column_headers)
+            
+            # extract data into row list
             rows = []
-            for record in data:
+            for record in record_data:
                 record_values = []
-                for column in columns_headers:
+                for column in column_headers:
                     val = record[column]
                     if isinstance(val, tuple):
                         val = val[1]
@@ -58,7 +63,7 @@ class ExcelExportView(ExcelExport):
                 rows.append(record_values)
 
         return req.make_response(
-            self.from_data(columns_headers, rows),
+            self.from_data([column_headers_translated[column] for column in column_headers], rows),
             headers=[
                 ('Content-Disposition', 'attachment; filename="%s"'
                     % self.filename(model)),
