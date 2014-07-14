@@ -43,7 +43,7 @@ After you installed it, you’ll find an additional link ‘Export current view�
     'external_dependencies' : {
         'python' : ['xlwt'],
      },
-    'data': [],
+    'qweb': ['static/xml/web_advanced_export.xml'],
     'active': False,
     'auto_install': False,
     'js': [
