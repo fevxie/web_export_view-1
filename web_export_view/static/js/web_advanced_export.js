@@ -34,13 +34,11 @@ openerp.web_export_view = function(instance, m) {
         },
 
         on_sidebar_export_all_xls: function() {
-            $.blockUI();
             var self = this;
             var domain_deferred = this.get_current_domain();
-            var domain;
 
-            $.when(domain_deferred).done(function (results) {
-                domain = results.domain;
+            domain_deferred.done(function (domain) {
+                $.blockUI();
                 var export_columns_names = [];
                 var export_columns_keys = [];
                 var view = self.getParent();
@@ -68,14 +66,15 @@ openerp.web_export_view = function(instance, m) {
         },
 
         get_current_domain: function () {
+            var self = this;
             var search_view = this.getParent().ViewManager.searchview;
             var search_data = search_view.build_search_data();
             var active_domain_done = instance.web.pyeval.eval_domains_and_contexts({
                 domains: search_data.domains,
                 contexts: search_data.contexts,
                 group_by_seq: search_data.groupbys || []
-            }).done(function (results) {
-                return results.domain;
+            }).then(function(results){
+                return self.getParent().dataset.domain.concat(results.domain || []);
             });
             return active_domain_done;
         },
